@@ -28,71 +28,71 @@ class VcfToCsvConverter:
         if not vcard_source:
             raise ParserException('Empty vCard file')
 
-        self.addressCount = {'Home': 1,}
-        self.telephoneCount = {'Home Phone': 1,
+        self.address_count = {'Home': 1, }
+        self.telephone_count = {'Home Phone': 1,
                                'Work Phone': 1,
                                'Cell Phone': 1,
                                'Fax': 1}
-        self.emailCount = {
-            'Home' : 1,
+        self.email_count = {
+            'Personal' : 1,
             'Work' : 1
         }
         self.data = {}
         self.quote = quote
         self.delimiter = delimiter
         self.output = ''
-        self.maxAddresses = 1
-        self.maxTelephones = 1
-        self.maxEmails = 1
+        self.max_addresses = 1
+        self.max_telephones = 1
+        self.max_emails = 1
         self.vcard_source = vcard_source.split('\n')
         self.columns = (
             'Name', 'Organisation', 'Job Title',
-            'Street Name', 'City', 'State/Province', 'Zip/Post Code', 'Country',
             'Home Phone',
             'Work Phone',
             'Cell Phone',
             'Fax',
-            'Home Email',
+            'Personal Email',
             'Work Email',
-            'website'
+            'Street Name', 'City', 'State/Province', 'Zip/Post Code', 'Country',
+            'facebook', 'linkedin', 'twitter',
+            'website',
         )
 
-        self.data = self.__resetRow()
+        self.data = self.__reset_row()
         for k in self.columns:
             self.__output(k)
 
         self.output += "\r\n"
-        self.__parseFile()
+        self.__parse_file()
 
-    def __outputQuote(self):
+    def __output_quote(self):
         if self.quote == True:
             self.output += '"'
 
-    def __CleanData(self,text):
+    def __clean_data(self,text):
         if text[-1:] == ';' or text[-1:] == '\\':
-            return self.__CleanData(text[:-1])
+            return self.__clean_data(text[:-1])
         return text
 
     def __output(self, text):
-        self.__outputQuote();
+        self.__output_quote()
         text = text.replace('\\:',':').replace('\\;',';').replace('\\,',',').replace('\\=','=')
         if self.quote == True:
             text = text.replace('\\n','\n').replace('\\r','\r').replace('\\'+self.delimiter,self.delimiter).strip()
         else:
             text = text.strip()
-        self.output += self.__CleanData(text)
-        self.__outputQuote()
+        self.output += self.__clean_data(text)
+        self.__output_quote()
         self.output += self.delimiter
 
-    def __resetRow(self):
-        self.addressCount = {'Home': 1}
-        self.telephoneCount = {'Home Phone': 1,
+    def __reset_row(self):
+        self.address_count = {'Home': 1}
+        self.telephone_count = {'Home Phone': 1,
                                'Work Phone': 1,
                                'Cell Phone': 1,
-                               'Home Fax': 1,
-                               'Work Fax': 1, }
-        self.emailCount = {
-            'Home': 1,
+                               'Fax': 1, }
+        self.email_count = {
+            'Personal': 1,
             'Work': 1
         }
         array = {}
@@ -106,7 +106,7 @@ class VcfToCsvConverter:
     def __getitem__(self, k):
         return self.data[k]
 
-    def __endLine(self):
+    def __end_line(self):
         for k in self.columns:
             try:
                 self.__output(self.data[ k ])
@@ -114,24 +114,24 @@ class VcfToCsvConverter:
                 self.output += self.delimiter
 
         self.output += "\r\n"
-        self.data = self.__resetRow()
+        self.data = self.__reset_row()
 
-    def __parseFile(self):
+    def __parse_file(self):
         for line in self.vcard_source:
-            self.__parseLine(line)
+            self.__parse_line(line)
 
-    def __parseLine(self, theLine):
+    def __parse_line(self, theLine):
         theLine = theLine.strip()
         if len(theLine) < 1:
             pass
         elif re.match('^BEGIN:VCARD', theLine, re.I):
             pass
         elif re.match('^END:VCARD', theLine, re.I):
-            self.__endLine()
+            self.__end_line()
         else:
-            self.__processLine(re.split("(?<!\\\\):", theLine))
+            self.__process_line(re.split("(?<!\\\\):", theLine))
 
-    def __processLine(self, pieces):
+    def __process_line(self, pieces):
         pre = re.split("(?<!\\\\);", pieces[0])
         if re.match('item.*', pre[0].split(".")[0], re.I) != None:
             try:
@@ -140,31 +140,35 @@ class VcfToCsvConverter:
                 print pre[0].split(".")
 
         if pre[0].upper() == 'N':
-            self.__processName(pieces[1])
+            self.__process_name(pieces[1])
         elif pre[0].upper() == 'FN':
-            self.__processSingleValue('Name', pieces[1])
+            self.__process_single_value('Name', pieces[1])
         elif pre[0].upper() == 'TITLE':
-            self.__processSingleValue('Job Title', pieces[1])
+            self.__process_single_value('Job Title', pieces[1])
         elif pre[0].upper() == 'ORG':
-            self.__processSingleValue('Organisation', pieces[1])
+            self.__process_single_value('Organisation', pieces[1])
         elif pre[0].upper() == 'ADR':
-            self.__processAddress(pieces[1])
+            self.__process_address(pieces[1])
         elif pre[0].upper() == 'TEL':
-            self.__processTelephone(pre, pieces[1:])
+            self.__process_telephone(pre, pieces[1:])
         elif pre[0].upper() == 'EMAIL':
-            self.__processEmail(pre, pieces[1:])
+            self.__process_email(pre, pieces[1:])
         elif pre[0].upper() == 'URL':
-            self.__processSingleValue('website', ":".join(pieces[1:]))
+            self.__process_single_value('website', ":".join(pieces[1:]))
 
-    def __processEmail(self, pre, p):
-        hwm = "Home"
+        self.data['facebook'] = ''
+        self.data['linkedin'] = ''
+        self.data['twitter'] = ''
+
+    def __process_email(self, pre, p):
+        hwm = "Personal"
         if re.search('work',(",").join(pre[1:]), re.I) != None:
             hwm = "Work"
-        if self.emailCount[hwm] <= self.maxEmails:
-            self.data["%s Email" % hwm] = p[0].capitalize()
+        if self.email_count[hwm] <= self.max_emails:
+            self.data["%s Email" % hwm] = p[0]
 
-    def __processTelephone(self, pre, p):
-        telephoneType = "Phone"
+    def __process_telephone(self, pre, p):
+        telephone_type = "Phone"
         hwm = "Home"
         if re.search('work', (",").join(pre[1:]), re.I) != None:
             hwm = "Work"
@@ -172,35 +176,39 @@ class VcfToCsvConverter:
             hwm = "Cell"
 
         if re.search('fax', (",").join(pre[1:]), re.I) != None:
-            telephoneType = "Fax"
+            telephone_type = "Fax"
 
-        if self.telephoneCount[("%s Phone" % hwm)] <= self.maxTelephones:
-            self.data["%s %s" % (hwm, telephoneType)] = p[0].capitalize()
-            self.telephoneCount["%s %s" % (hwm, telephoneType)] += 1
+        if telephone_type == 'Fax' and self.telephone_count[telephone_type] <= self.max_telephones:
+            self.data[telephone_type] = p[0]
+            self.telephone_count[telephone_type] += 1
 
-    def __processAddress(self, p):
+        elif self.telephone_count[("%s Phone" % hwm)] <= self.max_telephones:
+            self.data["%s %s" % (hwm, telephone_type)] = p[0]
+            self.telephone_count["%s %s" % (hwm, telephone_type)] += 1
+
+    def __process_address(self, p):
         try:
             (a, b, address, city, state, zip_code, country ) = re.split("(?<!\\\\);", p)
         except ValueError:
             (a, b, address, city, state, zip_code ) = re.split("(?<!\\\\);", p)
             country = ''
 
-        addressType = "Home"
+        address_type = "Home"
 
-        if self.addressCount[addressType] <= self.maxAddresses:
+        if self.address_count[address_type] <= self.max_addresses:
             self.data["Street Name"] = address.strip()
             self.data["City"] = city.strip()
             self.data["State/Province"] = state.strip()
             self.data["Zip/Post Code"] = zip_code.strip()
             self.data["Country"] = country.strip()
-            self.addressCount[addressType] += 1
+            self.address_count[address_type] += 1
 
-    def __processSingleValue(self, valueType, p):
-        self.data[valueType] = p
+    def __process_single_value(self, value_type, p):
+        self.data[value_type] = p
 
-    def __processName(self, p):
+    def __process_name(self, p):
         try:
-            (ln, fn, mi, pr, po) = re.split("(?<!\\\\);",p)
+            (ln, fn, mi, pr, po) = re.split("(?<!\\\\);", p)
             self.data['Name'] = '%s %s %s %s %s' % (pr.strip(), fn.strip(), mi.strip(), ln.strip(), po.strip())
         except ValueError:
             if not self.data['Name'] is None:
