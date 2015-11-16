@@ -20,7 +20,7 @@ from parser_exceptions import ParserException
 
 
 class VcfToCsvConverter:
-    def __init__(self, vcard_source, delimiter=",", quote=True):
+    def __init__(self, vcard_source, delimiter=",", quote=False):
         """delimeter:
             delimeter="," or delimeter=";"
         """
@@ -33,17 +33,14 @@ class VcfToCsvConverter:
                                'Work Phone': 1,
                                'Cell Phone': 1,
                                'Fax': 1}
-        self.email_count = {
-            'Personal' : 1,
-            'Work' : 1
-        }
+        self.email_count = 1
         self.data = {}
         self.quote = quote
         self.delimiter = delimiter
         self.output = ''
         self.max_addresses = 1
         self.max_telephones = 1
-        self.max_emails = 1
+        self.max_emails = 2
         self.vcard_source = vcard_source.split('\n')
         self.columns = (
             'Name', 'Organisation', 'Job Title',
@@ -55,18 +52,20 @@ class VcfToCsvConverter:
             'Work Email',
             'Street Name', 'City', 'State/Province', 'Zip/Post Code', 'Country',
             'facebook', 'linkedin', 'twitter',
-            'website',
+            'website'
         )
 
         self.data = self.__reset_row()
-        for k in self.columns:
-            self.__output(k)
+        for col_name in self.columns:
+            self.__output(text=col_name)
 
-        self.output += "\r\n"
+        self.output = self.output[:-1]
+        self.output += '\n'
+
         self.__parse_file()
 
     def __output_quote(self):
-        if self.quote == True:
+        if self.quote:
             self.output += '"'
 
     def __clean_data(self,text):
@@ -76,9 +75,9 @@ class VcfToCsvConverter:
 
     def __output(self, text):
         self.__output_quote()
-        text = text.replace('\\:',':').replace('\\;',';').replace('\\,',',').replace('\\=','=')
-        if self.quote == True:
-            text = text.replace('\\n','\n').replace('\\r','\r').replace('\\'+self.delimiter,self.delimiter).strip()
+        text = text.replace('\\:', ':').replace('\\;', ';').replace('\\,', ',').replace('\\=','=')
+        if self.quote:
+            text = text.replace('\\n', '\n').replace('\\r','\r').replace('\\' + self.delimiter, self.delimiter).strip()
         else:
             text = text.strip()
         self.output += self.__clean_data(text)
@@ -91,10 +90,7 @@ class VcfToCsvConverter:
                                'Work Phone': 1,
                                'Cell Phone': 1,
                                'Fax': 1, }
-        self.email_count = {
-            'Personal': 1,
-            'Work': 1
-        }
+        self.email_count = 1
         array = {}
         for k in self.columns:
             array[k] = ''
@@ -109,11 +105,11 @@ class VcfToCsvConverter:
     def __end_line(self):
         for k in self.columns:
             try:
-                self.__output(self.data[ k ])
+                self.__output(self.data[k])
             except KeyError:
                 self.output += self.delimiter
 
-        self.output += "\r\n"
+        self.output += "\n"
         self.data = self.__reset_row()
 
     def __parse_file(self):
@@ -152,20 +148,18 @@ class VcfToCsvConverter:
         elif pre[0].upper() == 'TEL':
             self.__process_telephone(pre, pieces[1:])
         elif pre[0].upper() == 'EMAIL':
-            self.__process_email(pre, pieces[1:])
-        elif pre[0].upper() == 'URL':
+            self.__process_email(pieces[1:])
+        # FBURL - support for vCard v4.0
+        elif pre[0].upper() in ('URL', 'FBURL'):
             self.__process_single_value('website', ":".join(pieces[1:]))
 
-        self.data['facebook'] = ''
-        self.data['linkedin'] = ''
-        self.data['twitter'] = ''
-
-    def __process_email(self, pre, p):
+    def __process_email(self, p):
         hwm = "Personal"
-        if re.search('work',(",").join(pre[1:]), re.I) != None:
-            hwm = "Work"
-        if self.email_count[hwm] <= self.max_emails:
+        if self.email_count <= self.max_emails:
+            if self.email_count > 1:
+                hwm = "Work"
             self.data["%s Email" % hwm] = p[0]
+            self.email_count += 1
 
     def __process_telephone(self, pre, p):
         telephone_type = "Phone"
